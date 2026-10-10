@@ -1,0 +1,15 @@
+import 'dotenv/config';
+import express from 'express';
+import http from 'node:http';
+import cors from 'cors';
+import { Server } from 'socket.io';
+import QRCode from 'qrcode';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { createEngine } from './engine.js';
+import { GAME_REGISTRY } from './games.js';
+const __dirname=path.dirname(fileURLToPath(import.meta.url));const app=express();const server=http.createServer(app);const origin=process.env.CLIENT_ORIGIN||'http://localhost:5173';
+app.use(cors({origin}));app.use(express.json({limit:'1mb'}));app.get('/api/health',(_req,res)=>res.json({ok:true,service:'alsaha-server',time:Date.now()}));app.use(express.static(path.resolve(__dirname,'../../client/dist')));app.get('/api/games',(_req,res)=>res.json(GAME_REGISTRY));app.get('/api/qr/:code',async(req,res)=>{try{const url=`${process.env.PUBLIC_URL||origin}/?room=${encodeURIComponent(req.params.code.toUpperCase())}`;res.type('png').send(await QRCode.toBuffer(url,{width:300,margin:2,errorCorrectionLevel:'M'}));}catch{res.status(400).json({error:'تعذر إنشاء رمز QR'});}});
+const io=new Server(server,{cors:{origin,methods:['GET','POST']},maxHttpBufferSize:1e6,connectionStateRecovery:{maxDisconnectionDuration:120000,skipMiddlewares:true}});createEngine(io);
+app.get('*',(req,res,next)=>{if(req.path.startsWith('/api/'))return next();res.sendFile(path.resolve(__dirname,'../../client/dist/index.html'),err=>{if(err)res.status(404).send('واجهة الساحة غير مبنية بعد. شغّل npm run build.');});});
+const port=Number(process.env.PORT||3001);server.listen(port,'0.0.0.0',()=>console.log(`الساحة server listening on ${port}`));
