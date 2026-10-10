@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: alsaha-multiplayer
+    runtime: node
+    plan: starter
+    buildCommand: npm install && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_VERSION
+        value: 22
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_PATH
+        value: /var/data/alsaha.sqlite
+    disk:
+      name: alsaha-data
+      mountPath: /var/data
+      sizeGB: 1
