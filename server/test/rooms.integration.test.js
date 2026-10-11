@@ -236,4 +236,86 @@ test('room creation, QR, second-device join, server-authoritative start, reconne
   });
   returned.emit('game:next');
   await doubleRoundPromise;
+
+  const mafiaCreatePromise = event(returned, 'room:created');
+  returned.emit('room:create', { gameId: 'mafia', name: 'المضيف', settings: { rounds: 1, mafiaCount: 1, doctorCount: 1, investigatorCount: 1, clownCount: 1 } });
+  const mafiaCreated = await mafiaCreatePromise;
+  const mafiaGuests = [...drawGuests];
+  for (const name of ['لاعب رابع', 'لاعب خامس']) {
+    const socket = connectSocket(url, { transports: ['websocket'], reconnection: false });
+    sockets.push(socket);
+    mafiaGuests.push(socket);
+    await event(socket, 'connect');
+  }
+  for (let i = 0; i < mafiaGuests.length; i++) {
+    const joinedMafia = event(mafiaGuests[i], 'room:joined');
+    mafiaGuests[i].emit('room:join', { code: mafiaCreated.room.code, name: ['رسام ثاني', 'رسام ثالث', 'لاعب رابع', 'لاعب خامس'][i] });
+    await joinedMafia;
+  }
+  const mafiaSockets = [returned, ...mafiaGuests];
+  const rolePromises = mafiaSockets.map(socket => new Promise(resolve => {
+    const handler = room => {
+      if (room.code === mafiaCreated.room.code && room.state.mySecret?.role) {
+        socket.off('room:private', handler);
+        resolve({ socket, room });
+      }
+    };
+    socket.on('room:private', handler);
+  }));
+  const mafiaStartPromise = new Promise(resolve => {
+    const handler = room => {
+      if (room.code === mafiaCreated.room.code && room.status === 'playing' && room.state.phase === 'role-reveal') {
+        returned.off('room:update', handler);
+        resolve(room);
+      }
+    };
+    returned.on('room:update', handler);
+  });
+  returned.emit('room:start');
+  const mafiaPublicStart = await mafiaStartPromise;
+  const roleViews = await Promise.all(rolePromises);
+  assert.equal(mafiaPublicStart.state.private, undefined, 'Mafia roles must not be in public state');
+  assert.equal(mafiaPublicStart.state.mafiaActions, undefined, 'Mafia actions must not be in public state');
+  const investigator = roleViews.find(view => view.room.state.mySecret.role === 'investigator');
+  assert.ok(investigator, 'one player must receive the investigator role');
+  const nightPromise = new Promise(resolve => {
+    const handler = room => {
+      if (room.code === mafiaCreated.room.code && room.state.phase === 'night') {
+        returned.off('room:update', handler);
+        resolve(room);
+      }
+    };
+    returned.on('room:update', handler);
+  });
+  returned.emit('game:next');
+  await nightPromise;
+  const target = mafiaCreated.room.players.find(p => p.id !== investigator.room.players.find(x => x.name === 'المضيف')?.id);
+  const investigatorPlayer = investigator.room.players.find(p => p.id === investigator.room.players.find(x => x.id === p.id)?.id);
+  const investigatorId = roleViews.find(view => view.room.state.mySecret.role === 'investigator')?.room.players.find(p => p.name !== 'المضيف')?.id;
+  const investigatorMe = investigator.room.players.find(p => p.id === investigatorId) || investigator.room.players[0];
+  const targetId = mafiaCreated.room.players.find(p => p.id !== investigatorMe.id)?.id || mafiaCreated.room.players.find(p => p.id !== investigator.room.players[0].id)?.id;
+  const privateResultPromise = new Promise(resolve => {
+    const handler = room => {
+      if (room.code === mafiaCreated.room.code && room.state.mySecret?.investigationResult) {
+        investigator.socket.off('room:private', handler);
+        resolve(room);
+      }
+    };
+    investigator.socket.on('room:private', handler);
+  });
+  const publicActionPromise = new Promise(resolve => {
+    const handler = room => {
+      if (room.code === mafiaCreated.room.code && room.state.phase === 'night') {
+        returned.off('room:update', handler);
+        resolve(room);
+      }
+    };
+    returned.on('room:update', handler);
+  });
+  investigator.socket.emit('mafia:action', { targetId, action: 'investigator', confirm: true });
+  const investigatorPrivate = await privateResultPromise;
+  const publicAfterInvestigation = await publicActionPromise;
+  assert.equal(typeof investigatorPrivate.state.mySecret.investigationResult.isMafia, 'boolean');
+  assert.equal(publicAfterInvestigation.state.private, undefined);
+  assert.equal(publicAfterInvestigation.state.investigationResult, undefined);
 });
