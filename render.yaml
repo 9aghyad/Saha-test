@@ -3,12 +3,12 @@ services:
     name: alsaha-multiplayer
     runtime: node
     plan: starter
-    buildCommand: npm install && npm run build
-    startCommand: npm start
+    buildCommand: yarn install && yarn build
+    startCommand: yarn start
     healthCheckPath: /api/health
     envVars:
       - key: NODE_VERSION
-        value: 22
+        value: 20
       - key: NODE_ENV
         value: production
       - key: DATABASE_PATH
