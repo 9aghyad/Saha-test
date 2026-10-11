@@ -1,10 +1,10 @@
 export const GAME_REGISTRY = [
- {id:'family-feud',name:'فاميلي فيود',description:'خمّن أشهر الإجابات واجمع نقاط فريقك',players:'4–12',kind:'teams'},
- {id:'guess-it',name:'خمنها',description:'اشرح الكلمة وخلي فريقك يعرفها',players:'3–10',kind:'individual'},
+ {id:'family-feud',name:'فاميلي فيود',description:'خمّن أشهر الإجابات واجمع نقاط فريقك',players:'2–12',kind:'teams'},
+ {id:'guess-it',name:'خمنها',description:'اشرح الكلمة وخلي فريقك يعرفها',players:'2–10',kind:'individual'},
  {id:'trap',name:'المفخخة',description:'اختر الإجابة الصحيحة وتجنب الفخاخ',players:'3–10',kind:'individual'},
  {id:'mafia',name:'مافيا',description:'اكشف الأدوار السرية قبل فوات الأوان',players:'5–12',kind:'social'},
- {id:'draw-it',name:'ارسمها',description:'ارسم بسرعة وخلي الباقين يخمّنوا',players:'3–10',kind:'drawing'},
- {id:'auction',name:'المزاد',description:'زايد على معرفتك واثبت إجاباتك',players:'3–10',kind:'auction'},
+ {id:'draw-it',name:'ارسمها',description:'ارسم بسرعة وخلي الباقين يخمّنوا',players:'2–10',kind:'drawing'},
+ {id:'auction',name:'المزاد',description:'زايد على معرفتك واثبت إجاباتك',players:'2–10',kind:'auction'},
  {id:'arena-champion',name:'بطل الساحة',description:'تحديات سريعة وترتيب مباشر',players:'2–8',kind:'individual'}
 ];
 export const FEUD_QUESTIONS = [
