@@ -72,7 +72,7 @@ test('room creation, QR, second-device join, server-authoritative start, reconne
   assert.equal(joined.room.players.find(p => p.id === created.playerId).host, true);
   const updates = [];
   host.on('room:update', room => updates.push(room));
-  const startedPromise = event(host, 'room:update');
+  const startedPromise = new Promise(resolve => { const handler = room => { if (room.status === 'playing') { host.off('room:update', handler); resolve(room); } }; host.on('room:update', handler); });
   host.emit('room:start');
   const started = await startedPromise;
   assert.equal(started.status, 'playing');
