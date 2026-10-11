@@ -47,7 +47,7 @@ test('room creation, QR, second-device join, server-authoritative start, reconne
   t.after(async () => {
     for (const socket of sockets) socket.disconnect();
     child.kill('SIGTERM');
-    await new Promise(resolve => child.once('exit', resolve));
+    await new Promise(resolve => { if (child.exitCode !== null || child.signalCode !== null) resolve(); else child.once('exit', resolve); });
     await rm(directory, { recursive: true, force: true });
   });
   await waitFor(() => output.includes('server listening'), 10000);
@@ -61,7 +61,7 @@ test('room creation, QR, second-device join, server-authoritative start, reconne
   assert.match(created.room.code, /^[A-Z0-9]{5}$/);
   const qr = await fetch(`${url}/api/qr/${created.room.code}`);
   assert.equal(qr.status, 200);
-  assert.match(qr.headers.get('content-type') || '', /image\\/png/);
+  assert.match(qr.headers.get('content-type') || '', /image\/png/);
   const guest = connectSocket(url, { transports: ['websocket'], reconnection: false });
   sockets.push(guest);
   await event(guest, 'connect');
