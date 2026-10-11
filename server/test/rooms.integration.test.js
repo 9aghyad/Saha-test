@@ -93,4 +93,147 @@ test('room creation, QR, second-device join, server-authoritative start, reconne
   returned.emit('room:kick', { targetId: joined.playerId });
   await kickedPromise;
   assert.equal(updates.some(room => room.code === created.room.code), true);
+
+  const drawCreatePromise = event(returned, 'room:created');
+  returned.emit('room:create', { gameId: 'draw-it', name: 'المضيف' });
+  const drawCreated = await drawCreatePromise;
+  const drawGuests = [];
+  for (const name of ['رسام ثاني', 'رسام ثالث']) {
+    const socket = connectSocket(url, { transports: ['websocket'], reconnection: false });
+    sockets.push(socket);
+    drawGuests.push(socket);
+    await event(socket, 'connect');
+    const joinedDraw = event(socket, 'room:joined');
+    socket.emit('room:join', { code: drawCreated.room.code, name });
+    await joinedDraw;
+  }
+  const wordPromise = new Promise(resolve => {
+    const handler = room => {
+      if (room.code === drawCreated.room.code && room.state.wordChoices?.length === 3) {
+        returned.off('room:private', handler);
+        resolve(room);
+      }
+    };
+    returned.on('room:private', handler);
+  });
+  const drawStartPromise = new Promise(resolve => {
+    const handler = room => {
+      if (room.code === drawCreated.room.code && room.status === 'playing') {
+        returned.off('room:update', handler);
+        resolve(room);
+      }
+    };
+    returned.on('room:update', handler);
+  });
+  returned.emit('room:start');
+  await drawStartPromise;
+  const privateDraw = await wordPromise;
+  assert.equal(privateDraw.state.wordChoices.length, 3);
+  const selectedWord = privateDraw.state.wordChoices[0];
+  returned.emit('draw:choose-word', { word: selectedWord });
+  const strokePromise = event(drawGuests[0], 'draw:stroke');
+  returned.emit('draw:stroke', { stroke: { points: [{x:0.1,y:0.1},{x:0.3,y:0.3}], color: '#123456', size: 5, tool: 'pen' } });
+  const deliveredStroke = await strokePromise;
+  assert.equal(deliveredStroke.points.length, 2);
+  const clearedPromise = new Promise(resolve => {
+    const handler = room => {
+      if (room.code === drawCreated.room.code && room.state.drawStrokes?.length === 0) {
+        drawGuests[0].off('room:update', handler);
+        resolve(room);
+      }
+    };
+    drawGuests[0].on('room:update', handler);
+  });
+  returned.emit('draw:clear');
+  await clearedPromise;
+
+  const auctionCreatePromise = event(returned, 'room:created');
+  returned.emit('room:create', { gameId: 'auction', name: 'المضيف', settings: { rounds: 3 } });
+  const auctionCreated = await auctionCreatePromise;
+  for (let i = 0; i < drawGuests.length; i++) {
+    const joinedAuction = event(drawGuests[i], 'room:joined');
+    drawGuests[i].emit('room:join', { code: auctionCreated.room.code, name: ['رسام ثاني', 'رسام ثالث'][i] });
+    await joinedAuction;
+  }
+  const auctionStartPromise = new Promise(resolve => {
+    const handler = room => {
+      if (room.code === auctionCreated.room.code && room.status === 'playing') {
+        returned.off('room:update', handler);
+        resolve(room);
+      }
+    };
+    returned.on('room:update', handler);
+  });
+  returned.emit('room:start');
+  await auctionStartPromise;
+  for (const [socket, amount] of [[returned, 2], [drawGuests[0], 3], [returned, 4]]) {
+    const expectedLength = amount === 2 ? 1 : amount === 3 ? 2 : 3;
+    const bidUpdate = new Promise(resolve => {
+      const handler = room => {
+        if (room.code === auctionCreated.room.code && room.state.bids?.length === expectedLength) {
+          socket.off('room:update', handler);
+          resolve(room);
+        }
+      };
+      socket.on('room:update', handler);
+    });
+    socket.emit('auction:bid', { amount });
+    await bidUpdate;
+  }
+  const proofPromise = new Promise(resolve => {
+    const handler = room => {
+      if (room.code === auctionCreated.room.code && room.state.phase === 'prove') {
+        returned.off('room:update', handler);
+        resolve(room);
+      }
+    };
+    returned.on('room:update', handler);
+  });
+  returned.emit('auction:prove');
+  await proofPromise;
+  const submittedPromise = new Promise(resolve => {
+    const handler = room => {
+      if (room.code === auctionCreated.room.code && room.state.submittedAnswers?.[auctionCreated.playerId]?.length === 1) {
+        returned.off('room:update', handler);
+        resolve(room);
+      }
+    };
+    returned.on('room:update', handler);
+  });
+  returned.emit('game:answer', { answer: 'تفاح' });
+  await submittedPromise;
+  const scoredPromise = new Promise(resolve => {
+    const handler = room => {
+      if (room.code === auctionCreated.room.code && room.players.find(p => p.id === auctionCreated.playerId)?.score > 0) {
+        returned.off('room:update', handler);
+        resolve(room);
+      }
+    };
+    returned.on('room:update', handler);
+  });
+  returned.emit('auction:judge', { answerIndex: 0, correct: true });
+  await scoredPromise;
+  const secretRoundPromise = new Promise(resolve => {
+    const handler = room => {
+      if (room.code === auctionCreated.room.code && room.state.round === 2 && room.state.auctionType === 'secret') {
+        returned.off('room:update', handler);
+        resolve(room);
+      }
+    };
+    returned.on('room:update', handler);
+  });
+  returned.emit('game:next');
+  const secretRound = await secretRoundPromise;
+  assert.equal(Object.hasOwn(secretRound.state, 'bids'), false, 'secret bids must be hidden from public state');
+  const doubleRoundPromise = new Promise(resolve => {
+    const handler = room => {
+      if (room.code === auctionCreated.room.code && room.state.round === 3 && room.state.phase === 'double') {
+        returned.off('room:update', handler);
+        resolve(room);
+      }
+    };
+    returned.on('room:update', handler);
+  });
+  returned.emit('game:next');
+  await doubleRoundPromise;
 });
